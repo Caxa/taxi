@@ -36,7 +36,8 @@ cursor = conn.cursor()
 
 # Состояния бронирования берём из booking.py
 WAIT_PHONE = 0
-CHOOSE_TYPE, CHOOSE_CITY, CHOOSE_POINT, ENTER_TIME, CONFIRM_BOOKING = booking.get_states_range()
+CHOOSE_TYPE, CHOOSE_DIRECTION, ENTER_ADDRESS_FROM, CHOOSE_POINT_TO, ENTER_TIME, CONFIRM_BOOKING, EXTRA = booking.get_states_range()
+
 
 # Главное меню (из booking.py)
 main_menu = booking.main_menu
@@ -124,7 +125,7 @@ async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 if status in ("pending", "confirmed"):
                     keyboard = InlineKeyboardMarkup([
-                        [InlineKeyboardButton(f"❌ Отменить бронь #{booking_id}", callback_data=f"cancel:{booking_id}")]
+                        [InlineKeyboardButton(f"❌ Отменить бронь #{i+1}", callback_data=f"cancel:{booking_id}")]
                     ])
                 else:
                     keyboard = None
@@ -299,16 +300,17 @@ def main():
 
     # ConversationHandler для бронирования (запускается через пункт меню "🚕 Забронировать поездку")
     conv_handler = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^🚕 Забронировать поездку$"), booking.choose_type)],
+        entry_points=[MessageHandler(filters.Regex('🚕 Забронировать поездку'), booking.choose_type)],
         states={
-            WAIT_PHONE: [MessageHandler(filters.CONTACT, get_phone)],
             CHOOSE_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.choose_type)],
-            CHOOSE_CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.choose_city)],
-            CHOOSE_POINT: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.choose_point)],
+            CHOOSE_DIRECTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.choose_direction)],
+            ENTER_ADDRESS_FROM: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.enter_address_from)],
+            CHOOSE_POINT_TO: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.choose_point_to)],
             ENTER_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.enter_time)],
-            CONFIRM_BOOKING: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_booking_wrapper)],
+            CONFIRM_BOOKING: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.confirm_booking)],
+            EXTRA: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.extra_handler)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[CommandHandler('cancel', cancel)]
     )
 
     # Регистрируем хендлеры

@@ -1,3 +1,4 @@
+
 import os
 import logging
 import psycopg2
@@ -36,7 +37,7 @@ cursor = conn.cursor()
 
 # Состояния бронирования берём из booking.py
 WAIT_PHONE = 0
-CHOOSE_TYPE, CHOOSE_DIRECTION, ENTER_ADDRESS_FROM, CHOOSE_POINT_TO, ENTER_TIME, CONFIRM_BOOKING, EXTRA = booking.get_states_range()
+CHOOSE_TYPE, CHOOSE_DIRECTION, ENTER_ADDRESS_FROM, CHOOSE_POINT_TO, ENTER_DATE, ENTER_TIME, CONFIRM_BOOKING, EXTRA = booking.get_states_range()
 
 
 # Главное меню (из booking.py)
@@ -306,7 +307,8 @@ def main():
             CHOOSE_DIRECTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.choose_direction)],
             ENTER_ADDRESS_FROM: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.enter_address_from)],
             CHOOSE_POINT_TO: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.choose_point_to)],
-            ENTER_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.enter_time)],
+            ENTER_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.enter_date)],  # ⬅️ ок
+            ENTER_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.enter_time)],  # ⬅️ ОБЯЗАТЕЛЬНО
             CONFIRM_BOOKING: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.confirm_booking)],
             EXTRA: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.extra_handler)],
         },

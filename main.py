@@ -10,7 +10,14 @@ from telegram.ext import (
     CallbackQueryHandler, ContextTypes, filters
 )
 from datetime import datetime, timedelta
-
+import re
+from admin_role_handler import (
+    confirm_bookings,
+    approve_booking,
+    admin_menu_handler,
+    AWAIT_ADMIN_ACTION,
+    AWAIT_BOOKING_ID
+)
 
 import booking  # логика бронирования только тут
 
@@ -53,9 +60,9 @@ STATUS_MAP = {
 
 
 # /start — приветствие и регистрация
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
-    logger.info("/start от пользователя %s", telegram_id)
     cursor.execute("SELECT * FROM users WHERE telegram_id = %s", (telegram_id,))
     user = cursor.fetchone()
 
@@ -72,7 +79,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Добро пожаловать! Выберите действие:", reply_markup=main_menu)
         return ConversationHandler.END
 
-# Получение номера телефона
+# Получение телефона
 async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     contact = update.message.contact
     telegram_id = update.effective_user.id
@@ -288,18 +295,25 @@ async def handle_cancel_callback(update: Update, context: ContextTypes.DEFAULT_T
         conn.commit()
 
         await query.edit_message_text(f"🚫 Бронь #{booking_id} успешно отменена.\n{refund_msg}", reply_markup=main_menu)
-
 # Главная функция запуска бота
 def main():
     logger.info("Запуск Telegram Taxi Bot...")
 
     app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
 
-    # Сохраняем conn и cursor в bot_data для глобального доступа
     app.bot_data["conn"] = conn
     app.bot_data["cursor"] = cursor
 
-    # ConversationHandler для бронирования (запускается через пункт меню "🚕 Забронировать поездку")
+    # Conversation handler для получения телефона
+    start_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            WAIT_PHONE: [MessageHandler(filters.CONTACT, get_phone)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
+    # Conversation handler бронирования
     conv_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('🚕 Забронировать поездку'), booking.choose_type)],
         states={
@@ -307,23 +321,32 @@ def main():
             CHOOSE_DIRECTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.choose_direction)],
             ENTER_ADDRESS_FROM: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.enter_address_from)],
             CHOOSE_POINT_TO: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.choose_point_to)],
-            ENTER_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.enter_date)],  # ⬅️ ок
-            ENTER_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.enter_time)],  # ⬅️ ОБЯЗАТЕЛЬНО
+            ENTER_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.enter_date)],
+            ENTER_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.enter_time)],
             CONFIRM_BOOKING: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.confirm_booking)],
             EXTRA: [MessageHandler(filters.TEXT & ~filters.COMMAND, booking.extra_handler)],
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[CommandHandler("cancel", cancel)]
     )
 
-    # Регистрируем хендлеры
-    app.add_handler(CallbackQueryHandler(handle_cancel_callback, pattern=r'^cancel:\d+$'))
+    # Admin handler
+    admin_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("admin", confirm_bookings)],
+        states={
+            AWAIT_ADMIN_ACTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_menu_handler)],
+            AWAIT_BOOKING_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, approve_booking)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)]
+    )
 
-    app.add_handler(MessageHandler(filters.Regex(r"^/cancel_\d+$"), cancel_booking))
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(conv_handler)  # Conversation handler бронирования
+    # Добавление хендлеров
+    app.add_handler(start_conv_handler)
+    app.add_handler(admin_conv_handler)
+    app.add_handler(conv_handler)
+    app.add_handler(admin_conv_handler)
+    app.add_handler(CallbackQueryHandler(handle_cancel_callback, pattern=r'^cancel:\d+$'))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_main_menu))
 
-    # Запуск бота
     app.run_polling()
 
 if __name__ == "__main__":
